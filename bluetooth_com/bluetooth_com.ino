@@ -11,6 +11,53 @@
 #define SERVICE_UUID2        "6d68efe5-04b6-4a85-abc3-2d95a8a2d01d"
 #define CHARACTERISTIC_UUID2 "f3641400-00b0-4240-ba50-05ca45bf8abc"
 
+
+// Joystick deadzone
+const int DEADZONE_MIN = 100;  // adjusted center - 15
+const int DEADZONE_MAX = 145;  // adjusted center + 15
+
+// Robot constants
+const float r = 20.3;   
+const float L = 28.637;   
+float omega = 0.0;   
+
+// Apply deadzone to joystick input
+int applyDeadzone(int value) {
+    if (value >= DEADZONE_MIN && value <= DEADZONE_MAX) {
+        return 0; // within deadzone
+    } 
+    return value; // outside deadzone, return as-is
+}
+
+// Compute wheel speeds for 3-wheel omni bot
+void computeWheelSpeeds(int X, int Y, float &w1, float &w2, float &w3) {
+    w1 = (1.0 * Y + L * omega) / r;
+    w2 = (-0.866 * X - 0.5 * Y + L * omega) / r;
+    w3 = (0.866 * X - 0.5 * Y + L * omega) / r;
+
+}
+
+// Determine approximate movement direction
+String getDirection(float w1, float w2, float w3) {
+    // If all wheels are zero, robot is stopped
+    Serial.println(w1);
+    Serial.println(w2);
+    Serial.println(w3);
+    if (w1 == 0 && w2 == 0 && w3 == 0) return "Stopped";
+
+    // Forward/backward check (based on majority wheels)
+    if (w1==0 && w2 > 0 && w3 < 0) return "Forward";
+    if (w1==0 && w2 < 0 && w3 >0) return "Backward";
+
+    // Sideways check
+    if (w1 > 0 && w2>0) return "Right";
+    if (w1 < 0 && w2< 0) return "Left";
+
+    return "Diagonal/Complex"; // Any other combination
+}
+
+
+
 // Callback for first service
 class Service1Callbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) override {
@@ -23,18 +70,19 @@ class Service1Callbacks: public BLECharacteristicCallbacks {
     int i = 0;
 
     const char* ptr = value.c_str();    // Pointer to traverse the string
-
+    Serial.println(value.c_str());
     while (*ptr) {                // Loop until null terminator
         arr[i++] = strtol(ptr, (char**)&ptr, 10); // Convert to int
         if (*ptr == ',') ptr++;                    // Skip comma
     }
 
-    // Print the array
-    for(int j = 0; j < i; j++) {
-        Serial.println(arr[j]);
-    }
- 
-  
+  int X = applyDeadzone(arr[0]);
+  int Y = applyDeadzone(arr[1]);
+
+  // Compute wheel speeds
+  float w1, w2, w3;
+  computeWheelSpeeds(X, Y, w1, w2, w3);  
+   Serial.print(" | Direction: "); Serial.println(getDirection(w1, w2, w3));
       }
     }
 

@@ -77,14 +77,15 @@ void loop() {
     int yValue = analogRead(VRy);
     int buttonState = digitalRead(SW);
 
-    int xMapped = map(xValue, 0, 4095, -2047, 2047);
-    int yMapped = map(yValue, 0, 4095, -2047, 2047);
+    int xMapped = map(xValue, 0, 4095, 2047, -2047);
+    int yMapped = map(yValue, 0, 4095, 2047, -2047);
 
     // Format data as "x,y,z"
     String data = String(xMapped) + "," + String(yMapped) + "," + String(buttonState);
     pRemoteCharacteristic->writeValue(data.c_str());
 
     Serial.println("Sent joystick data: " + data);
+   
   }
 
   delay(100); // Send every 100ms
