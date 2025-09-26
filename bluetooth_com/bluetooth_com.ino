@@ -2,6 +2,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include <stdlib.h> 
+#include <math.h> 
 
 // UUIDs for first service
 #define SERVICE_UUID1        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -12,14 +13,75 @@
 #define CHARACTERISTIC_UUID2 "f3641400-00b0-4240-ba50-05ca45bf8abc"
 
 
-// Joystick deadzone
+
+// ----- Pins
+const int dir1Pin = 12;  // Motor 1 direction(w2) left wheel back
+const int pwm1Pin = 13;  // Motor 1 speed (PWM)
+const int dir2Pin = 27;  // Motor 2 direction(w3) right wheel back
+const int pwm2Pin = 14;  // Motor 2 speed (PWM)
+
+const int dir3Pin=25;
+const int pwm3Pin=26;
+
+
 const int DEADZONE_MIN = 100;  // adjusted center - 15
 const int DEADZONE_MAX = 145;  // adjusted center + 15
 
-// Robot constants
 const float r = 20.3;   
 const float L = 28.637;   
 float omega = 0.0;   
+int tempx=0;
+int tempy=0;
+int tempz=0;
+
+
+void stop_(){
+analogWrite(pwm1Pin,0);
+analogWrite(pwm2Pin,0);
+analogWrite(pwm3Pin,0);
+
+
+
+}
+
+void motor_direction(float w1,float w2,float w3,int pwm1,int pwm2,int pwm3){
+  if(w1!=0){
+if(w1>0){
+ digitalWrite(dir3Pin,HIGH);
+ 
+}else{
+ digitalWrite(dir3Pin,LOW);
+}
+analogWrite(pwm3Pin,pwm1);
+
+  }
+  if(w2!=0){
+if(w2>0){
+  digitalWrite(dir1Pin,HIGH);
+
+ 
+
+}else{
+digitalWrite(dir1Pin,LOW);
+
+}
+analogWrite(pwm1Pin,pwm2);
+}
+
+
+if(w3!=0){
+if(w3>0){
+digitalWrite(dir2Pin,HIGH);
+
+}else{
+digitalWrite(dir2Pin,LOW);
+
+}
+analogWrite(pwm2Pin,pwm3);
+
+}
+}
+
 
 // Apply deadzone to joystick input
 int applyDeadzone(int value) {
@@ -30,11 +92,26 @@ int applyDeadzone(int value) {
 }
 
 // Compute wheel speeds for 3-wheel omni bot
-void computeWheelSpeeds(int X, int Y, float &w1, float &w2, float &w3) {
+void computeWheelSpeeds(int X, int Y,int Z,float &w1, float &w2, float &w3,int potVal) {
+    omega=map(Z,2047,-2047,-0.689,0.689);
     w1 = (1.0 * Y + L * omega) / r;
     w2 = (-0.866 * X - 0.5 * Y + L * omega) / r;
     w3 = (0.866 * X - 0.5 * Y + L * omega) / r;
+    
+    float maxW = fmax(fabs(w1), fmax(fabs(w2), fabs(w3)));
 
+   float r1 = w1 / maxW;
+   float r2 = w2 / maxW;
+   float r3 = w3 / maxW;
+
+  int pwm1 = int(fabs(r1) * potVal);
+  int pwm2 = int(fabs(r2) * potVal);
+  int pwm3 = int(fabs(r3) * potVal);
+
+   
+
+
+   motor_direction(w1,w2,w3,pwm1,pwm2,pwm3);
 }
 
 // Determine approximate movement direction
@@ -46,12 +123,20 @@ String getDirection(float w1, float w2, float w3) {
     if (w1 == 0 && w2 == 0 && w3 == 0) return "Stopped";
 
     // Forward/backward check (based on majority wheels)
-    if (w1==0 && w2 > 0 && w3 < 0) return "Forward";
-    if (w1==0 && w2 < 0 && w3 >0) return "Backward";
+    if (w1==0 && w2 > 0 && w3 < 0){
+       return "Forward";
+    };
+    if (w1==0 && w2 < 0 && w3 >0) {
+      
+      return "Backward";
+      }
+    
+    ;
 
     // Sideways check
     if (w1 > 0 && w2>0) return "Right";
     if (w1 < 0 && w2< 0) return "Left";
+    
 
     return "Diagonal/Complex"; // Any other combination
 }
@@ -66,7 +151,7 @@ class Service1Callbacks: public BLECharacteristicCallbacks {
         Serial.print("[Service1] Received Value: ");
         Serial.println(value.c_str());
  const char* numbers = value.c_str(); // C-style string pointer
-    int arr[3];                   // Array to store parsed integers
+    int arr[6];                   // Array to store parsed integers
     int i = 0;
 
     const char* ptr = value.c_str();    // Pointer to traverse the string
@@ -76,13 +161,31 @@ class Service1Callbacks: public BLECharacteristicCallbacks {
         if (*ptr == ',') ptr++;                    // Skip comma
     }
 
+
+  
   int X = applyDeadzone(arr[0]);
   int Y = applyDeadzone(arr[1]);
+  int Z=applyDeadzone(arr[3]);
+  int potval=arr[4];
 
-  // Compute wheel speeds
-  float w1, w2, w3;
-  computeWheelSpeeds(X, Y, w1, w2, w3);  
-   Serial.print(" | Direction: "); Serial.println(getDirection(w1, w2, w3));
+  if(arr[5]==0){
+    stop_();
+  }
+
+ if (X == 0 && Y == 0 && Z == 0) {
+            stop_();
+        } else if (X != tempx || Y != tempy || Z != tempz) {
+            // Compute new wheel speeds only if any axis changed
+            float w1, w2, w3;
+            computeWheelSpeeds(X, Y, Z, w1, w2, w3, potval);  
+            Serial.print(" | Direction: "); Serial.println(getDirection(w1, w2, w3));
+        }
+
+        // Update previous values
+        tempx = X;
+        tempy = Y;
+        tempz = Z;
+  
       }
     }
 
@@ -127,6 +230,21 @@ class MyServerCallbacks: public BLEServerCallbacks {
 void setup() {
   Serial.begin(115200);
   Serial.println("Starting BLE work!");
+
+
+
+
+
+    // Direction pins
+  pinMode(dir1Pin, OUTPUT);
+  pinMode(dir2Pin, OUTPUT);
+  pinMode(dir3Pin, OUTPUT);
+  pinMode(pwm1Pin, OUTPUT);
+  pinMode(pwm2Pin, OUTPUT);
+  pinMode(pwm3Pin, OUTPUT);
+
+  // Setup PWM channels
+
   pinMode(2,OUTPUT);
 
   BLEDevice::init("MyESP32");

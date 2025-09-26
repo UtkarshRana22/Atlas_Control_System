@@ -5,8 +5,11 @@
 
 const int VRx = 32;
 const int VRy = 33;
-const int SW  = 25;   // Joystick button pin
-const int LED = 2;    // Status LED pin
+const int VRz= 34;
+const int potpin=35;
+const int btnpin=25;
+  
+const int LED = 2;    
 
 // Server info
 BLEAddress serverAddress("44:1D:64:BE:24:E2");  // Target server MAC
@@ -16,6 +19,8 @@ BLEAddress serverAddress("44:1D:64:BE:24:E2");  // Target server MAC
 BLEClient*  pClient;
 BLERemoteCharacteristic* pRemoteCharacteristic;
 bool connected = false;
+
+
 
 // Client callbacks for connect/disconnect events
 class MyClientCallbacks : public BLEClientCallbacks {
@@ -38,7 +43,9 @@ void setup() {
   // Initialize joystick pins
   pinMode(VRx, INPUT);
   pinMode(VRy, INPUT);
-  pinMode(SW, INPUT);
+  pinMode(VRz, INPUT);
+  pinMode(potpin, INPUT);
+  pinMode(btnpin, INPUT);
   pinMode(LED, OUTPUT);
   digitalWrite(LED, LOW);
 
@@ -72,20 +79,27 @@ void setup() {
 }
 
 void loop() {
+
+
   if (connected && pRemoteCharacteristic && pRemoteCharacteristic->canWrite()) {
     int xValue = analogRead(VRx);
     int yValue = analogRead(VRy);
-    int buttonState = digitalRead(SW);
+    int zValue=  analogRead(VRz);
+    int potval=  analogRead(potpin);
+    int btnval= analogRead(btnpin);
 
     int xMapped = map(xValue, 0, 4095, 2047, -2047);
     int yMapped = map(yValue, 0, 4095, 2047, -2047);
+    int zMapped=  map(zValue, 0, 4095, 2047, -2047);
+    int mappedValue = map(potval, 0, 4095, 0, 255);
+    Serial.println(potval);
 
     // Format data as "x,y,z"
-    String data = String(xMapped) + "," + String(yMapped) + "," + String(buttonState);
+    String data = String(xMapped) + "," + String(yMapped) + "," + String(zMapped)+","+String(mappedValue)+","+String(btnval);
     pRemoteCharacteristic->writeValue(data.c_str());
 
     Serial.println("Sent joystick data: " + data);
-   
+    
   }
 
   delay(100); // Send every 100ms
